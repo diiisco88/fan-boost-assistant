@@ -1,0 +1,207 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+
+  accounts Account[]
+  sessions Session[]
+  creator  Creator?
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Creator {
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  fanvueId           String    @unique
+  fanvueHandle       String
+  displayName        String
+  avatarUrl          String?
+  encryptedToken     String    @db.Text
+  encryptedRefresh   String?   @db.Text
+  tokenExpiresAt     DateTime?
+  webhookSecret      String?
+  planTier           String    @default("starter")
+  trialEndsAt        DateTime?
+  subscriptionActive Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscribers   Subscriber[]
+  messageDrafts MessageDraft[]
+  tips          Tip[]
+  posts         Post[]
+  automations   Automation[]
+  auditLogs     AuditLog[]
+  settings      CreatorSettings?
+}
+
+model CreatorSettings {
+  id                    String  @id @default(cuid())
+  creatorId             String  @unique
+  welcomeEnabled        Boolean @default(true)
+  welcomeTemplate       String  @db.Text @default("Hey {{name}}! So happy you’re here 💖 I can’t wait to share more with you. Feel free to DM me anytime!")
+  thankYouEnabled       Boolean @default(true)
+  thankYouTemplate      String  @db.Text @default("Thank you so much for the tip, {{name}}! You have no idea how much that means to me 🙏")
+  reengageEnabled       Boolean @default(false)
+  reengageDaysThreshold Int     @default(14)
+  reengageTemplate      String  @db.Text @default("Hey {{name}}, just checking in! I’ve been posting some new stuff I think you’ll love 💫")
+  optOutKeywords        String  @default("stop,unsubscribe,no more,leave me alone")
+
+  creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+}
+
+model Subscriber {
+  id               String    @id @default(cuid())
+  creatorId        String
+  fanvueFanId      String
+  displayName      String
+  username         String?
+  avatarUrl        String?
+  subscribedAt     DateTime
+  lastInteractedAt DateTime?
+  lastMessageAt    DateTime?
+  lastViewAt       DateTime?
+  totalTips        Float     @default(0)
+  tipCount         Int       @default(0)
+  churnRiskScore   Float     @default(0)
+  isVip            Boolean   @default(false)
+  optedOut         Boolean   @default(false)
+  status           String    @default("active")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  creator       Creator        @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  messageDrafts MessageDraft[]
+  tips          Tip[]
+
+  @@unique([creatorId, fanvueFanId])
+}
+
+model MessageDraft {
+  id           String    @id @default(cuid())
+  creatorId    String
+  subscriberId String
+  type         String
+  draftBody    String    @db.Text
+  sentAt       DateTime?
+  dismissed    Boolean   @default(false)
+  triggerEvent String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  creator    Creator    @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  subscriber Subscriber @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+}
+
+model Tip {
+  id           String   @id @default(cuid())
+  creatorId    String
+  subscriberId String
+  fanvueTipId  String   @unique
+  amount       Float
+  currency     String   @default("USD")
+  message      String?  @db.Text
+  receivedAt   DateTime
+  createdAt    DateTime @default(now())
+
+  creator    Creator    @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  subscriber Subscriber @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+}
+
+model Post {
+  id              String   @id @default(cuid())
+  creatorId       String
+  fanvuePostId    String   @unique
+  title           String?
+  publishedAt     DateTime
+  viewCount       Int      @default(0)
+  likeCount       Int      @default(0)
+  tipTotal        Float    @default(0)
+  newSubsFromPost Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+}
+
+model Automation {
+  id        String    @id @default(cuid())
+  creatorId String
+  type      String
+  enabled   Boolean   @default(false)
+  runCount  Int       @default(0)
+  lastRunAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@unique([creatorId, type])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  creatorId String
+  action    String
+  details   Json?
+  createdAt DateTime @default(now())
+
+  creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+}
+
+model WebhookEvent {
+  id          String    @id @default(cuid())
+  eventType   String
+  fanvueId    String?
+  payload     Json
+  processed   Boolean   @default(false)
+  processedAt DateTime?
+  error       String?   @db.Text
+  createdAt   DateTime  @default(now())
+}
