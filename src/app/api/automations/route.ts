@@ -18,7 +18,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     where: { creatorId: session.creatorId },
   });
 
-  const automationMap = Object.fromEntries(automations.map((a) => [a.type, a]));
+  const automationMap = Object.fromEntries(automations.map((a: { type: string; runCount: number; lastRunAt: Date | null }) => [a.type, a]));
 
   return NextResponse.json({
     welcome: {
