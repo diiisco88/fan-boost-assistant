@@ -53,7 +53,7 @@ export async function POST(
   }
 
   try {
-    await sendMessage(accessToken, draft.subscriber.fanvueFanId, draft.draftBody);
+    await sendMessage(accessToken, draft.subscriber.fanvueFanId, { text: draft.draftBody });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to send message";
     return NextResponse.json({ error: message }, { status: 502 });
