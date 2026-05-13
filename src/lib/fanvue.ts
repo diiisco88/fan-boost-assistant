@@ -14,6 +14,7 @@ const SCOPES = [
   "read:fan",
   "read:chat",
   "write:chat",
+  "write:post",
   "read:insights",
   "read:post",
   "read:media",
@@ -112,17 +113,294 @@ export async function getTips(token: string): Promise<any[]> {
   return Array.isArray(data) ? data : data.data ?? data.tips ?? [];
 }
 
-export async function getPosts(token: string): Promise<any[]> {
-  const response = await fetch(`${BASE_URL}/v1/creator/posts`, {
+export type PostAudience = "subscribers" | "followers-and-subscribers";
+
+export interface Post {
+  uuid: string;
+  createdAt: string;
+  text: string | null;
+  price: number | null;
+  mediaPreviewUuid: string | null;
+  audience: PostAudience;
+  publishAt: string | null;
+  publishedAt: string | null;
+  expiresAt: string | null;
+  mediaUuids: string[];
+  isPinned: boolean;
+  likesCount: number;
+  commentsCount: number;
+  tips: { count: number; totalGross: number; totalNet: number };
+  collections: { uuid: string; label: string }[];
+}
+
+export interface PostsPage {
+  data: Post[];
+  pagination: Pagination;
+}
+
+export interface PostTip {
+  user: Follower | null;
+  createdAt: string | null;
+  gross: number;
+  net: number;
+}
+
+export interface PostTipsPage {
+  data: PostTip[];
+  pagination: Pagination;
+}
+
+export interface PostLike {
+  user: Follower | null;
+  createdAt: string;
+}
+
+export interface PostLikesPage {
+  data: PostLike[];
+  pagination: Pagination;
+}
+
+export interface CommentUser {
+  uuid: string;
+  handle: string;
+  displayName: string;
+  nickname: string | null;
+  isTopSpender: boolean;
+}
+
+export interface PostComment {
+  uuid: string;
+  text: string;
+  user: CommentUser | null;
+  createdAt: string;
+  updatedAt: string | null;
+}
+
+export interface PostCommentsPage {
+  data: PostComment[];
+  pagination: Pagination;
+}
+
+export async function getPostComments(
+  token: string,
+  postUuid: string,
+  page = 1,
+  size = 15
+): Promise<PostCommentsPage> {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  const response = await fetch(`${BASE_URL}/posts/${postUuid}/comments?${params}`, {
     headers: apiHeaders(token),
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch posts: ${response.status}`);
+    const text = await response.text();
+    throw new Error(`Failed to fetch post comments: ${response.status} ${text}`);
   }
 
-  const data = await response.json();
-  return Array.isArray(data) ? data : data.data ?? data.posts ?? [];
+  return response.json();
+}
+
+export async function getPostLikes(
+  token: string,
+  postUuid: string,
+  page = 1,
+  size = 15
+): Promise<PostLikesPage> {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  const response = await fetch(`${BASE_URL}/posts/${postUuid}/likes?${params}`, {
+    headers: apiHeaders(token),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to fetch post likes: ${response.status} ${text}`);
+  }
+
+  return response.json();
+}
+
+export async function getPostTips(
+  token: string,
+  postUuid: string,
+  page = 1,
+  size = 15
+): Promise<PostTipsPage> {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  const response = await fetch(`${BASE_URL}/posts/${postUuid}/tips?${params}`, {
+    headers: apiHeaders(token),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to fetch post tips: ${response.status} ${text}`);
+  }
+
+  return response.json();
+}
+
+export interface CreatePostInput {
+  audience: PostAudience;
+  text?: string;
+  mediaUuids?: string[];
+  mediaPreviewUuid?: string;
+  price?: number;
+  publishAt?: string;
+  expiresAt?: string;
+  collectionUuids?: string[];
+}
+
+export interface UpdatePostInput {
+  text?: string | null;
+  mediaUuids?: string[];
+  mediaPreviewUuid?: string | null;
+  price?: number | null;
+  audience?: PostAudience;
+  publishAt?: string | null;
+  expiresAt?: string | null;
+  collectionUuids?: string[] | null;
+}
+
+export async function unpinPost(token: string, uuid: string): Promise<Post> {
+  const response = await fetch(`${BASE_URL}/posts/${uuid}/pin`, {
+    method: "DELETE",
+    headers: apiHeaders(token),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to unpin post: ${response.status} ${text}`);
+  }
+
+  return response.json();
+}
+
+export async function pinPost(token: string, uuid: string): Promise<Post> {
+  const response = await fetch(`${BASE_URL}/posts/${uuid}/pin`, {
+    method: "POST",
+    headers: apiHeaders(token),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to pin post: ${response.status} ${text}`);
+  }
+
+  return response.json();
+}
+
+export async function repostPost(token: string, uuid: string): Promise<Post> {
+  const response = await fetch(`${BASE_URL}/posts/${uuid}/repost`, {
+    method: "POST",
+    headers: apiHeaders(token),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to repost: ${response.status} ${text}`);
+  }
+
+  return response.json();
+}
+
+export async function createPostComment(
+  token: string,
+  postUuid: string,
+  text: string
+): Promise<{ uuid: string; text: string; createdAt: string; updatedAt: string | null }> {
+  const response = await fetch(`${BASE_URL}/posts/${postUuid}/comments`, {
+    method: "POST",
+    headers: { ...apiHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Failed to create post comment: ${response.status} ${err}`);
+  }
+
+  return response.json();
+}
+
+export async function deletePost(token: string, uuid: string): Promise<void> {
+  const response = await fetch(`${BASE_URL}/posts/${uuid}`, {
+    method: "DELETE",
+    headers: apiHeaders(token),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to delete post: ${response.status} ${text}`);
+  }
+}
+
+export async function updatePost(
+  token: string,
+  uuid: string,
+  input: UpdatePostInput
+): Promise<Post> {
+  const response = await fetch(`${BASE_URL}/posts/${uuid}`, {
+    method: "PATCH",
+    headers: { ...apiHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to update post: ${response.status} ${text}`);
+  }
+
+  return response.json();
+}
+
+export async function createPost(token: string, input: CreatePostInput): Promise<Post> {
+  const response = await fetch(`${BASE_URL}/posts`, {
+    method: "POST",
+    headers: { ...apiHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to create post: ${response.status} ${text}`);
+  }
+
+  return response.json();
+}
+
+export async function getPost(token: string, uuid: string): Promise<Post> {
+  const response = await fetch(`${BASE_URL}/posts/${uuid}`, {
+    headers: apiHeaders(token),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to fetch post: ${response.status} ${text}`);
+  }
+
+  return response.json();
+}
+
+export async function getPosts(
+  token: string,
+  page = 1,
+  size = 15,
+  includeUnpublished = true
+): Promise<PostsPage> {
+  const params = new URLSearchParams({
+    page: String(page),
+    size: String(size),
+    includeUnpublished: String(includeUnpublished),
+  });
+  const response = await fetch(`${BASE_URL}/posts?${params}`, {
+    headers: apiHeaders(token),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to fetch posts: ${response.status} ${text}`);
+  }
+
+  return response.json();
 }
 
 export async function sendMessage(
@@ -410,6 +688,175 @@ export async function getChatterLeaderboard(
 
   const data = await response.json();
   return data.data;
+}
+
+export interface ChatTemplate {
+  uuid: string;
+  text: string | null;
+  price: number | null;
+  mediaUuids: string[];
+  folderName: string | null;
+}
+
+export interface ChatTemplatesPage {
+  data: ChatTemplate[];
+  pagination: Pagination;
+}
+
+export async function getChatTemplates(
+  token: string,
+  page = 1,
+  size = 15,
+  folderName?: string
+): Promise<ChatTemplatesPage> {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  if (folderName) params.set("folderName", folderName);
+
+  const response = await fetch(`${BASE_URL}/chats/templates?${params}`, {
+    headers: apiHeaders(token),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to fetch chat templates: ${response.status} ${text}`);
+  }
+
+  return response.json();
+}
+
+export type SmartListId =
+  | "subscribers"
+  | "auto_renewing"
+  | "non_renewing"
+  | "followers"
+  | "free_trial_subscribers"
+  | "expired_subscribers"
+  | "spent_more_than_50"
+  | "muted";
+
+export interface SmartList {
+  name: string;
+  uuid: SmartListId;
+  count: number;
+}
+
+export async function getSmartLists(token: string): Promise<SmartList[]> {
+  const response = await fetch(`${BASE_URL}/chats/lists/smart`, {
+    headers: apiHeaders(token),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to fetch smart lists: ${response.status} ${text}`);
+  }
+
+  return response.json();
+}
+
+export interface SmartListMember {
+  uuid: string;
+  displayName: string;
+  handle: string;
+  isCreator: boolean;
+}
+
+export interface SmartListMembersPage {
+  data: SmartListMember[];
+  pagination: Pagination;
+}
+
+export async function getSmartListMembers(
+  token: string,
+  listId: SmartListId,
+  page = 1,
+  size = 15
+): Promise<SmartListMembersPage> {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  const response = await fetch(`${BASE_URL}/chats/lists/smart/${listId}?${params}`, {
+    headers: apiHeaders(token),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to fetch smart list members: ${response.status} ${text}`);
+  }
+
+  return response.json();
+}
+
+export async function getChatTemplate(
+  token: string,
+  templateUuid: string
+): Promise<ChatTemplate> {
+  const response = await fetch(`${BASE_URL}/chats/templates/${templateUuid}`, {
+    headers: apiHeaders(token),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to fetch chat template: ${response.status} ${text}`);
+  }
+
+  return response.json();
+}
+
+export async function deleteMessage(
+  token: string,
+  userUuid: string,
+  messageUuid: string
+): Promise<void> {
+  const response = await fetch(
+    `${BASE_URL}/chats/${userUuid}/messages/${messageUuid}`,
+    { method: "DELETE", headers: apiHeaders(token) }
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to delete message: ${response.status} ${text}`);
+  }
+}
+
+export type MassMessageStatus = "SENT" | "UNSENT" | "SENDING" | "FAILED" | "MODERATED" | "SCHEDULED";
+
+export interface MassMessage {
+  uuid: string;
+  text: string | null;
+  status: MassMessageStatus;
+  price: number | null;
+  createdAt: string | null;
+  publishedAt: string | null;
+  recipientCount: number;
+  viewCount: number;
+  purchaseCount: number;
+  totalRevenue: number;
+}
+
+export interface MassMessagesPage {
+  data: MassMessage[];
+  pagination: Pagination;
+}
+
+export async function getMassMessages(
+  token: string,
+  page = 1,
+  size = 15,
+  includeDeleted = false
+): Promise<MassMessagesPage> {
+  const params = new URLSearchParams({
+    page: String(page),
+    size: String(size),
+    includeDeleted: String(includeDeleted),
+  });
+  const response = await fetch(`${BASE_URL}/chats/mass-messages?${params}`, {
+    headers: apiHeaders(token),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to fetch mass messages: ${response.status} ${text}`);
+  }
+
+  return response.json();
 }
 
 export type PricingPlanStatus = "pending_setup" | "active" | "withdrawn";
