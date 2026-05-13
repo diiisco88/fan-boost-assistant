@@ -13,6 +13,7 @@ const SCOPES = [
   "read:creator",
   "read:fan",
   "read:chat",
+  "write:chat",
   "read:insights",
   "read:post",
   "read:media",
