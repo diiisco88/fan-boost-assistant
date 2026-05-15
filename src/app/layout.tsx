@@ -11,6 +11,13 @@ export const metadata: Metadata = {
   title: "Fan Boost Assistant",
   description:
     "The creator-side tool that keeps your subscribers engaged — without doing it for you.",
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
+  openGraph: {
+    images: ["/icon-512.png"],
+  },
 };
 
 export default function RootLayout({
