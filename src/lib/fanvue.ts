@@ -8,7 +8,12 @@ function apiHeaders(token: string): Record<string, string> {
   };
 }
 
+const AUTH_URL = "https://auth.fanvue.com/oauth2";
+
 const SCOPES = [
+  "openid",
+  "offline_access",
+  "offline",
   "read:self",
   "read:creator",
   "read:fan",
@@ -21,23 +26,40 @@ const SCOPES = [
   "read:tracking_links",
 ].join(" ");
 
-export function getFanvueAuthUrl(state: string): string {
+// PKCE helpers
+function base64URLEncode(buffer: Buffer): string {
+  return buffer.toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+}
+
+export function generateCodeVerifier(): string {
+  const { randomBytes } = require("crypto") as typeof import("crypto");
+  return base64URLEncode(randomBytes(32));
+}
+
+export function generateCodeChallenge(verifier: string): string {
+  const { createHash } = require("crypto") as typeof import("crypto");
+  return base64URLEncode(createHash("sha256").update(verifier).digest());
+}
+
+export function getFanvueAuthUrl(state: string, codeChallenge: string): string {
   const params = new URLSearchParams({
     client_id: process.env.FANVUE_CLIENT_ID ?? "",
     redirect_uri: process.env.FANVUE_REDIRECT_URI ?? "",
     response_type: "code",
     scope: SCOPES,
     state,
+    code_challenge: codeChallenge,
+    code_challenge_method: "S256",
   });
-  return `https://fanvue.com/oauth/authorize?${params.toString()}`;
+  return `${AUTH_URL}/auth?${params.toString()}`;
 }
 
-export async function exchangeCode(code: string): Promise<{
+export async function exchangeCode(code: string, codeVerifier: string): Promise<{
   access_token: string;
   refresh_token: string;
   expires_in: number;
 }> {
-  const response = await fetch(`${BASE_URL}/oauth/token`, {
+  const response = await fetch(`${AUTH_URL}/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -46,6 +68,7 @@ export async function exchangeCode(code: string): Promise<{
       client_id: process.env.FANVUE_CLIENT_ID ?? "",
       client_secret: process.env.FANVUE_CLIENT_SECRET ?? "",
       redirect_uri: process.env.FANVUE_REDIRECT_URI ?? "",
+      code_verifier: codeVerifier,
     }),
   });
 

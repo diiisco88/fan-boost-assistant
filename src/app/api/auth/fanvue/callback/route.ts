@@ -5,6 +5,7 @@ import { encryptToken } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
 
 const STATE_COOKIE = "fba_oauth_state";
+const VERIFIER_COOKIE = "fba_pkce_verifier";
 const SESSION_COOKIE = "fba_session";
 
 function getSecret(): Uint8Array {
@@ -42,10 +43,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.redirect(new URL("/?error=invalid_state", request.url));
   }
 
+  // Retrieve PKCE verifier
+  const codeVerifier = request.cookies.get(VERIFIER_COOKIE)?.value;
+  if (!codeVerifier) {
+    return NextResponse.redirect(new URL("/?error=missing_verifier", request.url));
+  }
+
   // Exchange code for tokens
   let tokens: { access_token: string; refresh_token: string; expires_in: number };
   try {
-    tokens = await exchangeCode(code);
+    tokens = await exchangeCode(code, codeVerifier);
   } catch (err) {
     console.error("Token exchange failed:", err);
     return NextResponse.redirect(new URL("/?error=token_exchange_failed", request.url));
@@ -114,8 +121,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const response = NextResponse.redirect(new URL("/dashboard", request.url));
 
-  // Clear state cookie, set session cookie
+  // Clear state + verifier cookies, set session cookie
   response.cookies.delete(STATE_COOKIE);
+  response.cookies.delete(VERIFIER_COOKIE);
   response.cookies.set(SESSION_COOKIE, sessionJwt, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
